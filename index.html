@@ -43,7 +43,7 @@ input,select,textarea{width:100%;padding:12px;border:1px solid var(--line);borde
 </head>
 <body>
 <header class="siteHeader">
-  <a class="brand brandLockup" href="/" onclick="navigateLearningHome();return false" aria-label="SINQ · 奇点 首页"><img src="assets/brand/courselex-mark.png" alt="" width="44" height="44"><span><strong>奇点</strong><small>SINQ</small></span></a>
+  <a class="brand brandLockup" href="./" onclick="navigateLearningHome();return false" aria-label="SINQ · 奇点 首页"><img src="assets/brand/courselex-mark.png" alt="" width="44" height="44"><span><strong>奇点</strong><small>SINQ</small></span></a>
   <details class="appearanceControl navMenu" id="appearanceControl"><summary aria-label="显示外观"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 0 0 16Z" fill="currentColor" stroke="none"/></svg><span id="appearanceLabel">跟随系统</span></summary><div class="appearancePanel"><strong>显示外观</strong><div class="appearanceOptions" role="group" aria-label="选择显示外观"><button type="button" data-appearance="light" aria-pressed="false" onclick="setSinqAppearance('light')">浅色</button><button type="button" data-appearance="dark" aria-pressed="false" onclick="setSinqAppearance('dark')">深色</button><button type="button" data-appearance="system" aria-pressed="true" onclick="setSinqAppearance('system')">系统</button></div><p id="appearanceStatus" role="status">跟随设备，或选择适合当前光线的显示方式</p></div></details>
   <div class="top" id="userNav" hidden>
     <nav class="studyNav" aria-label="学习导航"><button class="active" onclick="navigateStudy('home',this)">首页</button><button onclick="navigateStudy('manager',this)">资料</button><button onclick="navigateStudy('unknown',this)">生词</button><button onclick="navigateStudy('known',this)">熟词</button></nav>
@@ -254,7 +254,7 @@ function renderCurrent(){
 <script src="upload.js?v=4.3"></script>
 <script src="study-sync.js?v=1.1"></script>
 <script src="study-resume.js?v=1.0"></script>
-<script src="materials.js?v=7.9"></script>
+<script src="materials.js?v=7.10"></script>
 <script src="dropdown-menus.js?v=1.1"></script>
 <script src="learning-ui.js?v=2.8"></script>
 <script src="mobile-notebook.js?v=1.2"></script>
