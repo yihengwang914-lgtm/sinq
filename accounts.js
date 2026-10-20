@@ -134,17 +134,38 @@ async function saveProfile(event,required=false){
    else{showProfile(false);const n=document.getElementById('profileNotice');if(n)n.textContent='资料已保存';}
  }catch(e){const n=document.getElementById('profileNotice');if(n){n.textContent=e.message?.includes('duplicate')?'这个用户名已被使用，请换一个。':'保存失败：'+(e.message||'请稍后重试');n.className='notice danger'}}finally{if(button.isConnected)button.disabled=false;}
 }
+async function openCourseManager(){
+ const uid=session?.user.id;
+ if(typeof flushWorkspace==='function'&&!await flushWorkspace())return;
+ if(uid!==session?.user.id)return;
+ if(typeof closeLearningDrawer==='function')closeLearningDrawer();
+ if(document.getElementById('courseDialog')&&typeof closeCourseDialog==='function'&&!await closeCourseDialog())return;
+ showCourses();
+}
+let courseArchiveBusy=false;
 function showCourses(){
  document.body?.classList?.remove('assistantMode');
  if(!session)return showAuth();window._view={type:'courses'};
- app.innerHTML=`<div class="sectionHead"><button class="back" onclick="showHome()">← 返回</button><h1>自定义课程</h1></div><section class="panel"><p class="meta">按需添加课程，即可自定义课程数量。每门课支持 1–52 周；删除课程后可恢复，词汇与进度会保留。</p>
+ app.innerHTML=`<div class="sectionHead"><button class="back" onclick="showHome()">← 返回</button><h1>管理课程</h1></div><section class="panel"><p class="meta">按需添加课程，即可自定义课程数量。每门课支持 1–52 周；删除仅将课程移出学习列表，课件、笔记、词汇和进度都会保留；可在这里恢复。</p>
  <form onsubmit="createCourse(event)"><div class="row"><input id="courseName" aria-label="课程名称" placeholder="课程名称" maxlength="120" required><input id="courseCode" aria-label="课程简称" placeholder="课程简称（可选）" maxlength="40"><input id="courseWeeks" aria-label="周数" type="number" min="1" max="52" value="13" required></div><br><button class="primary">添加课程</button></form><div id="notice" class="notice" role="status"></div>
- <div class="list">${courseRows.map(c=>`<form class="item" onsubmit="updateCourse(event,'${c.id}')"><div>${c.archived?'<p class="meta">已删除 · 可恢复</p>':''}<label>课程名称<input name="name" value="${esc(c.name)}" maxlength="120" required></label><label>简称<input name="code" value="${esc(c.code)}" maxlength="40"></label><label>周数<input name="weeks" type="number" min="1" max="52" value="${c.weeks}" required></label></div><div><button class="secondary">保存</button><button class="linkbtn" type="button" onclick="archiveCourse('${c.id}',${!c.archived})">${c.archived?'恢复课程':'删除课程'}</button></div></form>`).join('')}</div>
+ <div class="list">${courseRows.filter(c=>!c.is_shared_template).map(c=>`<form class="item" onsubmit="updateCourse(event,'${c.id}')"><div>${c.archived?'<p class="meta">已删除 · 可恢复</p>':''}<label>课程名称<input name="name" value="${esc(c.name)}" maxlength="120" required></label><label>简称<input name="code" value="${esc(c.code)}" maxlength="40"></label><label>周数<input name="weeks" type="number" min="1" max="52" value="${c.weeks}" required></label></div><div><button class="secondary">保存</button><button class="linkbtn" type="button" onclick="archiveCourse('${c.id}',${!c.archived})">${c.archived?'恢复课程':'删除课程'}</button></div></form>`).join('')}</div>
  ${session.user.email?.toLowerCase()===LEGACY_EMAIL?'<hr><h3>个人数据迁移</h3><p class="meta">复制原来的课程与词库，保留原表。请在原来学习的浏览器完成迁移，以便导入其本地学习进度。重复执行不会重复复制词库。</p><button class="secondary" onclick="migrateLegacy()">复制我的旧词库与学习进度</button>':''}</section>`;
 }
 async function createCourse(event){event.preventDefault();try{await sb('user_courses',{method:'POST',body:JSON.stringify({name:document.getElementById('courseName').value.trim(),code:document.getElementById('courseCode').value.trim(),weeks:Number(document.getElementById('courseWeeks').value)})});await loadCloud();showCourses();notice('课程已添加')}catch(e){notice(e.message,true)}}
 async function updateCourse(event,id){event.preventDefault();const data=new FormData(event.target);try{await sb('user_courses?id=eq.'+id,{method:'PATCH',body:JSON.stringify({name:String(data.get('name')).trim(),code:String(data.get('code')).trim(),weeks:Number(data.get('weeks'))})});await loadCloud();showCourses();notice('课程已保存')}catch(e){notice('保存失败：'+e.message,true)}}
-async function archiveCourse(id,archived){if(archived&&!confirm("删除后将从首页移除这门课程。词汇和学习进度会保留，可随时恢复。确定删除吗？"))return;try{await sb('user_courses?id=eq.'+id,{method:'PATCH',body:JSON.stringify({archived})});await loadCloud();showCourses();notice(archived?'课程已删除，词汇和进度保留，可在此恢复':'课程已恢复')}catch(e){notice(e.message,true)}}
+async function archiveCourse(id,archived){
+ if(courseArchiveBusy||!session||!courseRows.some(c=>c.id===id&&!c.is_shared_template))return;
+ if(archived&&!confirm('将这门课程移出学习列表？课件、笔记、词汇和进度都会保留，可在管理课程中恢复。'))return;
+ const uid=session.user.id;courseArchiveBusy=true;
+ try{
+  await sb('user_courses?id=eq.'+encodeURIComponent(id),{method:'PATCH',body:JSON.stringify({archived})});
+  if(uid!==session?.user.id)return;
+  const loaded=await loadCloud();if(uid!==session?.user.id)return;
+  if(archived&&typeof assistantScope!=='undefined'&&assistantScope===id){assistantScope='all';try{sessionStorage.setItem('courselex-scope:'+uid,'all')}catch{}}
+  showCourses();notice(loaded?(archived?'课程已移出学习列表，所有内容保留，可随时恢复':'课程已恢复，可回到首页继续学习'):'更改已保存，但列表同步失败，请刷新后核对',!loaded);
+ }catch(e){if(uid===session?.user.id)notice('操作未完成：'+e.message,true)}finally{courseArchiveBusy=false}
+}
+
 async function migrateLegacy(){
  try{
  const result=await sb('rpc/migrate_legacy_vocabulary',{method:'POST',body:'{}'});await loadCloud();
