@@ -11,3 +11,11 @@ body.assistantMode .lexControls{justify-content:flex-start!important;gap:10px}bo
 body.assistantMode .lexControls .chatWeek{min-width:110px!important;max-width:130px;padding:10px 12px;background:var(--surface);border:1px solid var(--line);border-radius:12px}
 body .brandLockup small{font-family:system-ui,sans-serif!important;font-size:20px!important;font-weight:750;letter-spacing:.5px}body .brandLockup strong{font-size:14px!important}
 @media(max-width:700px){body.assistantMode .lexControls .chatWeek{min-width:100px!important;max-width:110px}body .brandLockup small{font-size:18px!important}}
+
+/* One scope control, with two independently accessible selectors. */
+body.assistantMode .lexControls .chatScopeGroup{display:flex;align-items:center;gap:0;min-width:0;max-width:100%;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+body.assistantMode .chatScopeGroup .courseSwitcher{min-width:0;max-width:240px;flex:1}
+body.assistantMode .chatScopeGroup .courseSwitcher>summary{border:0!important;background:transparent!important;box-shadow:none;border-radius:14px 0 0 14px;min-height:44px}
+body.assistantMode .lexControls .chatScopeGroup .chatWeek{border:0!important;border-left:1px solid var(--line)!important;border-radius:0 13px 13px 0;background:transparent!important;margin:0;min-height:36px;box-shadow:none}
+body.assistantMode .chatScopeGroup:focus-within{outline:2px solid var(--focus);outline-offset:2px}
+@media(max-width:700px){body.assistantMode .lexControls .chatScopeGroup{max-width:calc(100% - 46px);flex:1}body.assistantMode .chatScopeGroup .courseSwitcher{max-width:none}body.assistantMode .chatScopeGroup .courseSwitcher>summary{padding:10px;gap:6px}body.assistantMode .lexControls .chatScopeGroup .chatWeek{min-width:96px!important;max-width:110px;font-size:13px}}
