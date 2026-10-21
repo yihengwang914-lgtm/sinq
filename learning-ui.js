@@ -29,7 +29,7 @@ function restoreLearningRecovery(serverThread,requestedThread){
   if(serverThread.pending)return serverThread;
   if(index<0)serverThread={...serverThread,messages:[...(serverThread.messages||[]),...(saved.thread.messages||[]).filter(m=>m.id===request.request_id)]};
  }else serverThread=saved.thread;
- learningPendingRequest={...request,thread:saved.thread.id};learningRetryAllowed=saved.retryable!==false;
+ learningPendingRequest={...request,thread:serverThread.localOnly?request.thread:serverThread.id};learningRetryAllowed=saved.retryable!==false;
  learningError=learningRetryAllowed?'上次回答未完成，问题已恢复。点击继续，不用重新输入。':'问题已恢复，使用限制解除后可继续。';
  return serverThread;
 }
@@ -111,9 +111,9 @@ async function loadLearningHistory(force=false,threadId){
 function clearLearningConversation(){if(assistantBusy)return;learningGuide=null;saveLearningDraft();learningLoadSerial++;learningLoading=false;learningActionChoices=null;learningThread=null;learningPurpose='study';learningDraft='';learningDraftScope='';learningError='';learningPendingRequest=null;learningSaveThread();materialMessage='';renderStudyAssistant()}
 function changeLearningScope(value){if(assistantBusy)return;resetReadingPane(readingPane.open);learningGuide=null;clearTimeout(learningPoll);learningPoll=null;learningPurpose='study';saveLearningDraft();learningDraft='';learningDraftScope='';learningLoadSerial++;learningLoading=false;learningActionChoices=null;assistantScope=value||'all';try{sessionStorage.setItem('courselex-scope:'+session.user.id,assistantScope)}catch{}learningThread=null;learningState={threads:[],sources:[],reviews:[]};learningLoaded='';learningPendingRequest=null;learningError='';materialMessage='';renderStudyAssistant()}
 async function sendLearningRequest(body){
- if(assistantBusy)return;learningActionChoices=null;const epoch=accountEpoch,scope=assistantScope;body={purpose:learningPurpose,...body,scope,thread:learningThread?.id,request_id:body.request_id||crypto.randomUUID()};assistantBusy=true;learningError='';learningRetryAllowed=true;learningPendingRequest=body;dismissFinishedImport();
+ if(assistantBusy)return;learningActionChoices=null;const epoch=accountEpoch,scope=assistantScope;body={purpose:learningPurpose,...body,scope,thread:learningThread?.localOnly?body.thread:learningThread?.id,request_id:body.request_id||crypto.randomUUID()};assistantBusy=true;learningError='';learningRetryAllowed=true;learningPendingRequest=body;dismissFinishedImport();
  if(body.action==='chat'){
-  if(!learningThread)learningThread={id:body.request_id,messages:[],course_id:scope==='all'?null:scope};
+  if(!learningThread)learningThread={id:body.request_id,localOnly:true,messages:[],course_id:scope==='all'?null:scope};
   if(!learningThread.messages.some(m=>m.id===body.request_id))learningThread.messages.push({id:body.request_id,role:'user',content:body.text,created_at:new Date().toISOString()});
  }
  saveLearningRecovery(body);renderStudyAssistant();
@@ -124,7 +124,7 @@ async function sendLearningRequest(body){
   learningSaveThread();learningLoaded=session.user.id+':'+assistantScope;assistantBusy=false;renderStudyAssistant();if(result.action?.type!=='none')applyLexAction(result.action);
   // Refresh just metadata after each successful turn, preserving the current conversation.
   if(!learningLoading)loadLearningHistory(true,learningThread.id);
- }catch(e){if(epoch!==accountEpoch)return;assistantBusy=false;learningRetryAllowed=e.retryable!==false;learningError=e.message||'连接中断，请重试；已保存的内容仍在。';if(e.thread_id&&learningThread){learningThread.id=e.thread_id;learningPendingRequest.thread=e.thread_id;learningSaveThread()}saveLearningRecovery(learningPendingRequest);renderStudyAssistant()}
+ }catch(e){if(epoch!==accountEpoch)return;assistantBusy=false;learningRetryAllowed=e.retryable!==false;learningError=e.message||'连接中断，请重试；已保存的内容仍在。';if(e.thread_id&&learningThread){learningThread.id=e.thread_id;delete learningThread.localOnly;learningPendingRequest.thread=e.thread_id;learningSaveThread()}saveLearningRecovery(learningPendingRequest);renderStudyAssistant()}
 }
 function learningModeInstruction(skill){return {learn:'一次讲解一个知识点',outline:'梳理知识框架与重点',practice:'一次做一道练习，先不要显示答案',review:'整理容易混淆的概念，先不做题'}[skill]||''}
 function composeLearningQuestion(text,guide,selectedWeek){
