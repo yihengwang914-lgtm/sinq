@@ -13,6 +13,26 @@ function resetLearningAccount(){resetReadingPane();studyPickerModels.clear();lea
 function hasExplicitCourseScope(){try{return sessionStorage.getItem('courselex-scope:'+session.user.id)!==null}catch{return false}}
 function learningStorageKey(){return 'courselex-learning:'+session.user.id+':'+assistantScope}
 function learningSaveThread(){try{if(learningThread?.id)localStorage.setItem(learningStorageKey(),learningThread.id);else localStorage.removeItem(learningStorageKey())}catch{}}
+function learningRecoveryKey(){return 'sinq-chat-recovery:'+session.user.id+':'+assistantScope}
+function saveLearningRecovery(body){
+ if(body?.action!=='chat')return;
+ try{localStorage.setItem(learningRecoveryKey(),JSON.stringify({request:body,thread:learningThread,retryable:learningRetryAllowed}));learningSaveThread()}catch{}
+}
+function clearLearningRecovery(){try{localStorage.removeItem(learningRecoveryKey())}catch{}}
+function restoreLearningRecovery(serverThread,requestedThread){
+ let saved;try{saved=JSON.parse(localStorage.getItem(learningRecoveryKey())||'null')}catch{return serverThread}
+ if(!saved?.request||saved.request.action!=='chat'||saved.request.scope!==assistantScope||saved.thread?.id!==requestedThread)return serverThread;
+ const request=saved.request;
+ if(serverThread?.id===saved.thread.id){
+  const index=(serverThread.messages||[]).findIndex(m=>m.id===request.request_id);
+  if(index>=0&&serverThread.messages.slice(index+1).some(m=>m.role==='assistant')){clearLearningRecovery();learningPendingRequest=null;return serverThread}
+  if(serverThread.pending)return serverThread;
+  if(index<0)serverThread={...serverThread,messages:[...(serverThread.messages||[]),...(saved.thread.messages||[]).filter(m=>m.id===request.request_id)]};
+ }else serverThread=saved.thread;
+ learningPendingRequest={...request,thread:saved.thread.id};learningRetryAllowed=saved.retryable!==false;
+ learningError=learningRetryAllowed?'上次回答未完成，问题已恢复。点击继续，不用重新输入。':'问题已恢复，使用限制解除后可继续。';
+ return serverThread;
+}
 function learningMarkdown(text){
  const escaped=esc(text||'');const inline=s=>s.replace(/\*\*([^*\n]+)\*\*/g,'<strong>$1</strong>').replace(/`([^`\n]+)`/g,'<code>$1</code>');
  return escaped.split(/\n\s*\n/).map(block=>{
@@ -31,7 +51,7 @@ function renderActiveLearningQuestion(){const pending=pendingLearningQuestion();
 function renderLearningConversation(){
  const el=document.getElementById('assistantConversation');if(!el)return;const messages=learningThread?.messages||[];
  el.innerHTML=messages.length?messages.map(m=>`<article class="chatMessage ${m.role==='user'?'fromUser':'fromLex'+(m.kind==='feedback'?' learningFeedback':'')}" data-message="${esc(m.id)}">${m.role==='assistant'?learningMarkdown(m.content):esc(m.content)}${m.role==='assistant'?learningCitations(m.citations)+learningCoverage(m.coverage)+learningPlan(m.plan)+learningQuizSummary(m.quiz)+(learningThread?.course_id?`<button class="saveNoteAction" onclick="saveMessageNote('${m.id}')">存为笔记</button>`:''):''}</article>`).join(''):`<div class="learningWelcome">${learningLoading?'<p role="status">正在读取学习记录…</p>':''}${renderHomeResume()}</div>`;
- if(learningError)el.innerHTML+=`<div class="learningError" role="${assistantBusy?'status':'alert'}">${esc(learningError)}${assistantBusy?'':learningPendingRequest?(learningRetryAllowed?'<button onclick="retryLearningRequest()">重试这一步</button>':'<span class="limitHint">问题已保留，限制解除后可继续。</span>'):'<button onclick="loadLearningHistory(true)">重新加载</button>'}</div>`;
+ if(learningError)el.innerHTML+=`<div class="learningError" role="${assistantBusy?'status':'alert'}">${esc(learningError)}${assistantBusy?'':learningPendingRequest?(learningRetryAllowed?'<button onclick="retryLearningRequest()">继续回答</button>':'<span class="limitHint">问题已保留，限制解除后可继续。</span>'):'<button onclick="loadLearningHistory(true)">重新加载</button>'}</div>`;
  else if(messages.at(-1)?.role==='user'&&!assistantBusy&&!learningThread?.pending)el.innerHTML+='<div class="learningError">这条问题还没有完整回复，内容已保存。<button onclick="retrySavedLearningTurn()">继续回答</button></div>';
  if((assistantBusy||learningThread?.pending)&&!learningError)el.innerHTML+='<div class="chatMessage fromLex thinking" role="status">莱克正在整理思路…这条对话会自动保存。</div>';
  else if(!assistantBusy&&!learningThread?.pending)el.innerHTML+=renderActiveLearningQuestion();
@@ -79,13 +99,13 @@ async function loadLearningHistory(force=false,threadId){
  if(!session||learningLoading||assistantBusy)return;const epoch=accountEpoch,scope=assistantScope,serial=++learningLoadSerial;let redraw=true;learningLoading=true;learningError='';
  let stored=threadId;if(stored===undefined)try{stored=localStorage.getItem(learningStorageKey())}catch{}
  try{
-  let result;try{result=await coursewareRequest({action:'learning_history',scope,thread:stored||undefined})}catch(e){if(e.status===404&&stored){result=await coursewareRequest({action:'learning_history',scope});stored=null}else throw e}
+  let result;try{result=await coursewareRequest({action:'learning_history',scope,thread:stored||undefined})}catch(e){if(e.status===404&&stored){result=await coursewareRequest({action:'learning_history',scope})}else throw e}
   if(epoch!==accountEpoch||scope!==assistantScope||serial!==learningLoadSerial)return;
   if(scope==='all'&&result.thread?.course_id&&!threadId){localStorage.removeItem(learningStorageKey());result=await coursewareRequest({action:'learning_history',scope});}
-  if(epoch!==accountEpoch||scope!==assistantScope||serial!==learningLoadSerial)return;redraw=learningLoaded!==session.user.id+':'+scope||JSON.stringify(learningThread)!==JSON.stringify(result.thread||null);learningState=result;learningThread=result.thread||null;if(learningThread)learningPurpose=learningThread.purpose||'study';learningLoaded=session.user.id+':'+scope;learningSaveThread();
+  if(epoch!==accountEpoch||scope!==assistantScope||serial!==learningLoadSerial)return;redraw=learningLoaded!==session.user.id+':'+scope||JSON.stringify(learningThread)!==JSON.stringify(result.thread||null);learningState=result;learningThread=restoreLearningRecovery(result.thread||null,stored);if(learningThread)learningPurpose=learningThread.purpose||'study';learningLoaded=session.user.id+':'+scope;learningSaveThread();
   clearTimeout(learningPoll);
   if(learningThread?.pending||result.preparation&&['queued','preparing'].includes(result.preparation.status))learningPoll=setTimeout(()=>{if(window._view?.type==='home')loadLearningHistory(true,learningThread?.id)},learningThread?.pending?3000:6000);
- }catch(e){if(epoch===accountEpoch&&scope===assistantScope&&serial===learningLoadSerial)learningError='学习记录暂时无法加载：'+e.message}
+ }catch(e){if(epoch===accountEpoch&&scope===assistantScope&&serial===learningLoadSerial){learningThread=restoreLearningRecovery(learningThread,stored);if(!learningPendingRequest)learningError='学习记录暂时无法加载：'+e.message}}
  finally{if(epoch===accountEpoch&&scope===assistantScope&&serial===learningLoadSerial){learningLoading=false;if(window._view?.type==='home'){if(!redraw)updateLearningMetadata();else renderStudyAssistant()}}}
 }
 function clearLearningConversation(){if(assistantBusy)return;learningGuide=null;saveLearningDraft();learningLoadSerial++;learningLoading=false;learningActionChoices=null;learningThread=null;learningPurpose='study';learningDraft='';learningDraftScope='';learningError='';learningPendingRequest=null;learningSaveThread();materialMessage='';renderStudyAssistant()}
@@ -96,15 +116,15 @@ async function sendLearningRequest(body){
   if(!learningThread)learningThread={id:body.request_id,messages:[],course_id:scope==='all'?null:scope};
   if(!learningThread.messages.some(m=>m.id===body.request_id))learningThread.messages.push({id:body.request_id,role:'user',content:body.text,created_at:new Date().toISOString()});
  }
- renderStudyAssistant();
+ saveLearningRecovery(body);renderStudyAssistant();
  try{
   let result;for(let attempt=0;attempt<4;attempt++){try{result=await coursewareRequest(body);break}catch(e){if(e.status!==429||e.retryable===false||attempt===3)throw e;learningError='AI 通道正忙，正在自动继续，不用重复发送。';renderLearningConversation();await new Promise(r=>setTimeout(r,2500*(attempt+1)));if(epoch!==accountEpoch)return}}
-  if(epoch!==accountEpoch)return;learningThread=result.thread;if(learningThread)learningPurpose=learningThread.purpose||'study';learningPendingRequest=null;materialMessage='';learningError='';
+  if(epoch!==accountEpoch)return;if(body.action==='chat')clearLearningRecovery();learningThread=result.thread;if(learningThread)learningPurpose=learningThread.purpose||'study';learningPendingRequest=null;materialMessage='';learningError='';
   if(result.course_id&&courseRows.some(c=>c.id===result.course_id)){assistantScope=result.course_id;sessionStorage.setItem('courselex-scope:'+session.user.id,assistantScope)}
   learningSaveThread();learningLoaded=session.user.id+':'+assistantScope;assistantBusy=false;renderStudyAssistant();if(result.action?.type!=='none')applyLexAction(result.action);
   // Refresh just metadata after each successful turn, preserving the current conversation.
   if(!learningLoading)loadLearningHistory(true,learningThread.id);
- }catch(e){if(epoch!==accountEpoch)return;assistantBusy=false;learningRetryAllowed=e.retryable!==false;learningError=e.message||'连接中断，请重试；已保存的内容仍在。';if(e.thread_id){learningThread.id=e.thread_id;learningPendingRequest.thread=e.thread_id;learningSaveThread()}renderStudyAssistant()}
+ }catch(e){if(epoch!==accountEpoch)return;assistantBusy=false;learningRetryAllowed=e.retryable!==false;learningError=e.message||'连接中断，请重试；已保存的内容仍在。';if(e.thread_id&&learningThread){learningThread.id=e.thread_id;learningPendingRequest.thread=e.thread_id;learningSaveThread()}saveLearningRecovery(learningPendingRequest);renderStudyAssistant()}
 }
 function learningModeInstruction(skill){return {learn:'一次讲解一个知识点',outline:'梳理知识框架与重点',practice:'一次做一道练习，先不要显示答案',review:'整理容易混淆的概念，先不做题'}[skill]||''}
 function composeLearningQuestion(text,guide,selectedWeek){
