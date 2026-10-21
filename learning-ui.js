@@ -146,32 +146,33 @@ function startLearningGuide(skill='learn'){
 function guideCourseName(){const c=courseRows.find(c=>c.id===assistantScope);return c?.code||c?.name||''}
 function renderLearningGuide(){
  const area=document.getElementById('learningGuide');if(!area)return;
- if(!learningGuide){area.innerHTML='';return}
+ if(!learningGuide){area.innerHTML='';const prompt=document.getElementById('materialPrompt');if(prompt)prompt.placeholder='问莱克，或上传课件…';return}
  const g=learningGuide,sources=learningState.sources||[],weeks=[...new Set(sources.map(s=>Number(s.week)).filter(w=>w>0))].sort((a,b)=>a-b);
- const title={learn:'我们现在开始学习知识点',outline:'我们来理清知识之间的联系',practice:'我们来一道一道练习',review:'我们来整理薄弱点'}[g.skill];
+ const title={learn:'讲解知识点',outline:'梳理重点',practice:'出题练习',review:'安排复习'}[g.skill];
  const course=guideCourseName(),canContinue=Boolean(learningThread?.messages.length);
  let reply='',choices='';
- if(!course){reply='好，我们先确定这次学习的课程。你想学哪一门？';choices=courseRows.filter(c=>!c.archived&&!c.is_shared_template).map(c=>`<button onclick="chooseGuidedCourse('${c.id}')">${esc(c.code||c.name)}</button>`).join('')+'<button onclick="showFirstCourseDialog(&quot;notes&quot;)">＋ 创建课程</button>'}
+ if(!course){reply='选择课程' ;choices=courseRows.filter(c=>!c.archived&&!c.is_shared_template).map(c=>`<button onclick="chooseGuidedCourse('${c.id}')">${esc(c.code||c.name)}</button>`).join('')+'<button onclick="showFirstCourseDialog(&quot;notes&quot;)">＋ 创建课程</button>'}
  else if(g.stage==='start'){
-  reply=canContinue?`好，我们一起学 ${esc(course)}。你想继续上次的内容，还是从新的一周开始？`:`好，我们一起学 ${esc(course)}。${weeks.length?'你想从第几周开始？':'先把这次要学的内容带进来，课件或一段笔记都可以。'}`;
+  reply=weeks.length?'选择本次学习的周次':'添加课件或粘贴材料，开始学习。';
   choices=(canContinue?'<button class="primaryChoice" onclick="continueGuidedLearning()">继续上次的内容 →</button>':'')+(weeks.length?renderStudyPicker('guideWeek','学习周次','', [{value:'',label:'选择周次'},...weeks.map(w=>({value:String(w),label:'Week '+w}))],value=>{if(value)selectGuidedWeek(Number(value))}):'');
-  if(!weeks.length)choices+='<button class="primaryChoice" onclick="document.querySelector(&quot;.attachButton input&quot;).click()">添加课件</button><button onclick="showGuideTextImport()">粘贴一段学习材料</button><button onclick="showLearningSample()">先体验一个学习示例</button>';
+  if(!weeks.length)choices+='<button class="primaryChoice" onclick="document.querySelector(&quot;.attachButton input&quot;).click()">添加课件</button><button onclick="showGuideTextImport()">粘贴一段学习材料</button>';
  }else{
-  reply=`好的，先学 Week ${g.week}。${g.skill==='practice'?'你想练哪个知识点？我们一次做一道，答完再讲原因。':g.skill==='review'?'你想先复习哪个概念？也可以告诉我刚才哪里容易混淆。':'你想从哪一个知识点开始？你也可以说“按课件顺序”，我会先给你一个简短的知识地图。'}`;
-  choices='<button class="primaryChoice" onclick="prepareGuidedQuestion(&quot;按课件顺序，从第一个知识点开始&quot;)">按课件顺序开始 →</button>';
+  reply=g.skill==='practice'?'输入要练习的知识点，一次做一道题。':g.skill==='review'?'输入想复习的概念或容易混淆的地方。':'输入知识点，或按课件顺序开始。';
+  choices='<button class="primaryChoice" onclick="prepareGuidedQuestion(&quot;按课件顺序，从第一个知识点开始&quot;)">按课件顺序</button>';
+
  }
- area.innerHTML=`<section class="skillGuide" aria-label="学习引导"><header><span class="guideMark">${lexIcon('spark')}</span><span>莱克 · 学习引导</span><button class="guideClose" aria-label="关闭学习引导" onclick="learningGuide=null;renderLearningGuide()">×</button></header><div class="guideUser">${title}</div><p class="guideReply">${reply}</p><div class="guideChoices">${choices}</div><p class="guideFootnote">可以随时追问：“用人话讲”“换个例子”“先别出题”。</p></section>`;
+ area.innerHTML=`<section class="skillGuide compactGuide" aria-label="学习方式"><header><strong>${title}${g.week?' · Week '+esc(g.week):''}</strong><button class="guideClose" aria-label="取消学习方式" onclick="learningGuide=null;renderLearningGuide()">×</button></header><p class="guideReply">${reply}</p><div class="guideChoices">${choices}</div></section>`;
  const prompt=document.getElementById('materialPrompt');if(prompt)prompt.placeholder=g.stage==='topic'?'告诉莱克你想学的知识点，或选择按课件顺序…':'告诉莱克你想从哪里开始…';
 }
 async function chooseGuidedCourse(id){const skill=learningGuide?.skill||'learn';changeLearningScope(id);startLearningGuide(skill)}
-function selectGuidedWeek(week){if(!learningGuide)return;learningGuide.week=String(week);learningGuide.stage='topic';renderLearningGuide();document.getElementById('materialPrompt')?.focus()}
+function selectGuidedWeek(week){if(!learningGuide)return;const course=courseRows.find(c=>c.id===assistantScope&&!c.archived);week=Number(week);if(!course||!Number.isInteger(week)||week<1||week>Math.min(52,Number(course.weeks)||13))return;try{sessionStorage.setItem('sinq-week:'+session.user.id+':'+assistantScope,String(week))}catch{}learningGuide.week=String(week);learningGuide.stage='topic';renderStudyAssistant();document.getElementById('materialPrompt')?.focus()}
 function continueGuidedLearning(){learningGuide=null;renderLearningGuide();document.getElementById('materialPrompt').placeholder='接着问，或说“继续上次的内容”…';document.getElementById('materialPrompt').focus()}
 function prepareGuidedQuestion(topic){
  if(!learningGuide)return;const g=learningGuide;
  const mode={learn:'一个知识点一个知识点地学',outline:'梳理知识框架',practice:'一次做一道练习，先不要显示答案',review:'整理容易混淆的概念，先不做题'}[g.skill];
  learningDraft=`我们现在学习 Week ${g.week}。${topic}，${mode}。`;
  saveLearningDraft();const prompt=document.getElementById('materialPrompt');prompt.value=learningDraft;prompt.focus();
- document.querySelector('.guideReply').textContent='范围已经确定。我把学习请求放在输入框里了；你可以直接发送，也可以补充想学的知识点。';
+ document.querySelector('.guideReply').textContent='问题已填入，可修改后发送。';
 }
 function showGuideTextImport(){
  courseDialog('从一段材料开始',`<p class="workspaceHint">粘贴自己的笔记或教材摘录。它会作为学习材料加入当前上传流程，方便保留出处。</p><form onsubmit="attachGuideText(event)"><label for="guideSource">学习材料</label><textarea id="guideSource" rows="7" maxlength="12000" required placeholder="在这里粘贴一段内容…"></textarea><button class="secondary">添加为学习材料</button></form>`);
