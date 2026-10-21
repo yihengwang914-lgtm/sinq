@@ -142,6 +142,7 @@ async function chooseStudyToolCourse(tool){
  if(!labels[tool]||!session||assistantBusy||!await flushWorkspace())return;
  const rows=courseRows.filter(c=>!c.archived&&!c.is_shared_template);
  if(!rows.length)return showFirstCourseDialog(tool);
+ const week=typeof selectedChatWeek==='function'?selectedChatWeek():0;if(rows.some(c=>c.id===assistantScope)&&week){if(tool==='notebook')return openNotebookSplit(null,assistantScope,week);if(tool==='words')return startDailyStudy(false,{course:assistantScope,week});if(tool==='calendar')return showCourseWorkspace('calendar',assistantScope);}
  courseDialog('想学习哪门课？',`<p class="workspaceHint">选择课程，进入${labels[tool]}。</p><div class="toolCourseChoices notebookCourseChoices">${rows.map(c=>`<button class="noteItem" onclick="enterStudyToolCourse('${tool}','${c.id}')"><span><strong>${esc(c.code||c.name)}</strong>${c.code&&c.name!==c.code?`<small>${esc(c.name)}</small>`:''}</span><span aria-hidden="true">→</span></button>`).join('')}</div><button class="newChat" onclick="showFirstCourseDialog('${tool}')">＋ 添加课程</button>`);
 }
 async function enterStudyToolCourse(tool,courseId){
